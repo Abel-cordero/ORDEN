@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox
+from fpdf import FPDF
 
 DB_PATH = Path('ordenes.db')
 
@@ -22,7 +23,8 @@ def init_db(conn: sqlite3.Connection) -> None:
             nombre TEXT NOT NULL,
             direccion TEXT,
             celular TEXT NOT NULL,
-            dni TEXT
+            dni TEXT,
+            fecha_registro TEXT NOT NULL
         )
         """
     )
@@ -44,6 +46,11 @@ def init_db(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    # Ensure new columns exist when upgrading an old database
+    cur.execute("PRAGMA table_info(clientes)")
+    columnas = [row[1] for row in cur.fetchall()]
+    if "fecha_registro" not in columnas:
+        cur.execute("ALTER TABLE clientes ADD COLUMN fecha_registro TEXT")
     conn.commit()
 
 
@@ -54,9 +61,10 @@ def next_order_number(cur: sqlite3.Cursor) -> int:
 
 def add_cliente(conn: sqlite3.Connection, nombre: str, direccion: str, celular: str, dni: str):
     cur = conn.cursor()
+    fecha_registro = datetime.now().isoformat(sep=" ", timespec="minutes")
     cur.execute(
-        "INSERT INTO clientes(nombre, direccion, celular, dni) VALUES (?,?,?,?)",
-        (nombre, direccion, celular, dni),
+        "INSERT INTO clientes(nombre, direccion, celular, dni, fecha_registro) VALUES (?,?,?,?,?)",
+        (nombre, direccion, celular, dni, fecha_registro),
     )
     conn.commit()
     return cur.lastrowid
@@ -100,8 +108,8 @@ def add_orden(
     return numero
 
 
-def generar_hoja_txt(conn: sqlite3.Connection, numero_orden: int, destino: Path) -> None:
-    """Generate a plain text sheet for the given order number."""
+def generar_hoja_pdf(conn: sqlite3.Connection, numero_orden: int, destino: Path) -> None:
+    """Generate a PDF sheet for the given order number."""
     cur = conn.cursor()
     cur.execute(
         """
@@ -134,34 +142,45 @@ def generar_hoja_txt(conn: sqlite3.Connection, numero_orden: int, destino: Path)
         dni,
     ) = row
 
-    contenido = f"""Orden de Servicio N° {num:05d}
-Fecha de ingreso: {fecha}
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(0, 10, f"Orden de Servicio N° {num:05d}", ln=True)
+    pdf.cell(0, 10, f"Fecha de ingreso: {fecha}", ln=True)
+    pdf.ln(5)
 
-Cliente
--------
-Nombre     : {nombre}
-Dirección  : {direccion}
-Celular    : {celular}
-DNI        : {dni}
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "Cliente", ln=True)
+    pdf.set_font("Arial", size=12)
+    pdf.cell(0, 8, f"Nombre     : {nombre}", ln=True)
+    pdf.cell(0, 8, f"Dirección  : {direccion}", ln=True)
+    pdf.cell(0, 8, f"Celular    : {celular}", ln=True)
+    pdf.cell(0, 8, f"DNI        : {dni}", ln=True)
+    pdf.ln(5)
 
-Equipo
-------
-Tipo       : {tipo}
-Marca      : {marca}
-Modelo     : {modelo}
-N° Serie   : {serie}
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "Equipo", ln=True)
+    pdf.set_font("Arial", size=12)
+    pdf.cell(0, 8, f"Tipo       : {tipo}", ln=True)
+    pdf.cell(0, 8, f"Marca      : {marca}", ln=True)
+    pdf.cell(0, 8, f"Modelo     : {modelo}", ln=True)
+    pdf.cell(0, 8, f"N° Serie   : {serie}", ln=True)
+    pdf.ln(5)
 
-Estado del equipo
------------------
-Falla reportada: {falla}
-Diagnóstico    : {diag}
-Solución       : {sol}
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "Estado del equipo", ln=True)
+    pdf.set_font("Arial", size=12)
+    pdf.multi_cell(0, 8, f"Falla reportada: {falla}")
+    pdf.multi_cell(0, 8, f"Diagnóstico    : {diag}")
+    pdf.multi_cell(0, 8, f"Solución       : {sol}")
+    pdf.ln(10)
 
-Observaciones: ________________________________
+    pdf.cell(0, 8, "Observaciones: ________________________________", ln=True)
+    pdf.ln(20)
+    pdf.cell(90, 8, "Firma Cliente: __________________", ln=False)
+    pdf.cell(0, 8, "Firma Técnico: __________________", ln=True)
 
-Firma Cliente: __________________   Firma Técnico: __________________
-"""
-    destino.write_text(contenido, encoding="utf-8")
+    pdf.output(str(destino))
 
 
 def open_gui() -> None:
@@ -213,7 +232,7 @@ def open_gui() -> None:
                     data["diag"],
                     data["sol"],
                 )
-                generar_hoja_txt(conn, numero, Path(f"orden_{numero:05d}.txt"))
+                generar_hoja_pdf(conn, numero, Path(f"orden_{numero:05d}.pdf"))
             messagebox.showinfo("Éxito", f"Orden {numero:05d} registrada.")
             for var in vars_.values():
                 var.set("")
