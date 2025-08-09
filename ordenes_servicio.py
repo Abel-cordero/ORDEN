@@ -1,6 +1,8 @@
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+import tkinter as tk
+from tkinter import ttk, messagebox
 
 DB_PATH = Path('ordenes.db')
 
@@ -162,27 +164,68 @@ Firma Cliente: __________________   Firma Técnico: __________________
     destino.write_text(contenido, encoding="utf-8")
 
 
+def open_gui() -> None:
+    """Open a simple Tkinter form to capture order data."""
+    root = tk.Tk()
+    root.title("Nueva orden de servicio")
+
+    fields = [
+        ("Nombre", "nombre"),
+        ("Dirección", "direccion"),
+        ("Celular", "celular"),
+        ("DNI", "dni"),
+        ("Tipo de equipo", "tipo"),
+        ("Marca", "marca"),
+        ("Modelo", "modelo"),
+        ("N° Serie", "serie"),
+        ("Falla reportada", "falla"),
+        ("Diagnóstico", "diag"),
+        ("Solución", "sol"),
+    ]
+
+    vars_: dict[str, tk.StringVar] = {}
+    for i, (label, key) in enumerate(fields):
+        ttk.Label(root, text=label).grid(row=i, column=0, sticky="e", padx=5, pady=5)
+        var = tk.StringVar()
+        ttk.Entry(root, textvariable=var, width=40).grid(row=i, column=1, padx=5, pady=5)
+        vars_[key] = var
+
+    def guardar() -> None:
+        data = {k: v.get() for k, v in vars_.items()}
+        try:
+            with get_connection() as conn:
+                init_db(conn)
+                cliente_id = add_cliente(
+                    conn,
+                    data["nombre"],
+                    data["direccion"],
+                    data["celular"],
+                    data["dni"],
+                )
+                numero = add_orden(
+                    conn,
+                    cliente_id,
+                    data["tipo"],
+                    data["marca"],
+                    data["modelo"],
+                    data["serie"],
+                    data["falla"],
+                    data["diag"],
+                    data["sol"],
+                )
+                generar_hoja_txt(conn, numero, Path(f"orden_{numero:05d}.txt"))
+            messagebox.showinfo("Éxito", f"Orden {numero:05d} registrada.")
+            for var in vars_.values():
+                var.set("")
+        except Exception as exc:  # pragma: no cover - GUI feedback
+            messagebox.showerror("Error", str(exc))
+
+    ttk.Button(root, text="Guardar", command=guardar).grid(
+        row=len(fields), column=0, columnspan=2, pady=10
+    )
+
+    root.mainloop()
+
+
 if __name__ == "__main__":
-    with get_connection() as conn:
-        init_db(conn)
-        # Ejemplo de uso: crear un cliente, una orden y generar la hoja en texto
-        cliente_id = add_cliente(
-            conn,
-            nombre="Juan Pérez",
-            direccion="Av. Siempre Viva 123",
-            celular="999888777",
-            dni="12345678",
-        )
-        numero_orden = add_orden(
-            conn,
-            cliente_id,
-            tipo_equipo="Laptop",
-            marca="Lenovo",
-            modelo="ThinkPad",
-            numero_serie="SN123",
-            falla="No enciende",
-            diagnostico="Fuente dañada",
-            solucion="Reemplazo de fuente",
-        )
-        generar_hoja_txt(conn, numero_orden, Path(f"orden_{numero_orden:05d}.txt"))
-        print(f"Orden {numero_orden:05d} registrada y hoja generada.")
+    open_gui()
