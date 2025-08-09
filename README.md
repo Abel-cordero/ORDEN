@@ -8,7 +8,7 @@ Sistema sencillo para registrar órdenes de servicio en un taller de reparación
 python ordenes_servicio.py
 ```
 
-El script crea la base de datos `ordenes.db`, registra un ejemplo de orden y genera un archivo de texto con los datos de la orden.
+Al ejecutar el script se abre una pequeña ventana en la que se pueden ingresar los datos del cliente y del equipo. La información se almacena en la base de datos `ordenes.db` y se genera un archivo de texto con los detalles de la orden.
 
 ## Estructura de la base de datos
 - **clientes**: datos del cliente (nombre, dirección, celular, DNI).
